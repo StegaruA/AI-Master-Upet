@@ -1,0 +1,1040 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Generator Text N-Grams</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --surface: #111118;
+    --surface2: #1a1a26;
+    --border: #2a2a3a;
+    --accent: #7c6dfa;
+    --accent2: #fa6d8f;
+    --text: #e8e8f0;
+    --muted: #6b6b8a;
+    --green: #6dfac0;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Animated grid background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(124,109,250,0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(124,109,250,0.04) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container {
+    position: relative;
+    z-index: 1;
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 40px 24px;
+  }
+
+  header {
+    margin-bottom: 48px;
+    animation: fadeDown 0.6s ease both;
+  }
+
+  .badge {
+    display: inline-block;
+    background: rgba(124,109,250,0.15);
+    border: 1px solid rgba(124,109,250,0.3);
+    color: var(--accent);
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 2px;
+    padding: 5px 12px;
+    border-radius: 2px;
+    margin-bottom: 16px;
+    text-transform: uppercase;
+  }
+
+  h1 {
+    font-size: clamp(28px, 5vw, 48px);
+    font-weight: 800;
+    line-height: 1.1;
+    letter-spacing: -1px;
+  }
+
+  h1 span {
+    background: linear-gradient(135deg, var(--accent) 0%, var(--accent2) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .subtitle {
+    margin-top: 12px;
+    color: var(--muted);
+    font-size: 15px;
+    max-width: 520px;
+    line-height: 1.6;
+    font-weight: 400;
+  }
+
+  /* Controls */
+  .controls-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 16px;
+    animation: fadeUp 0.6s 0.1s ease both;
+  }
+
+  .control-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+    transition: border-color 0.2s;
+  }
+
+  .control-card:hover { border-color: rgba(124,109,250,0.4); }
+
+  .control-card label {
+    display: block;
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 1.5px;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+
+  .n-selector {
+    display: flex;
+    gap: 8px;
+  }
+
+  .n-btn {
+    flex: 1;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    font-family: 'Space Mono', monospace;
+    font-size: 13px;
+    padding: 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .n-btn:hover { color: var(--text); border-color: var(--accent); }
+  .n-btn.active {
+    background: rgba(124,109,250,0.2);
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .slider-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  input[type=range] {
+    flex: 1;
+    appearance: none;
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    outline: none;
+  }
+
+  input[type=range]::-webkit-slider-thumb {
+    appearance: none;
+    width: 16px; height: 16px;
+    background: var(--accent);
+    border-radius: 50%;
+    cursor: pointer;
+    box-shadow: 0 0 8px rgba(124,109,250,0.5);
+  }
+
+  .slider-val {
+    font-family: 'Space Mono', monospace;
+    font-size: 13px;
+    color: var(--accent);
+    min-width: 28px;
+    text-align: right;
+  }
+
+  .topic-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .pill {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 12px;
+    padding: 5px 12px;
+    border-radius: 20px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .pill:hover { color: var(--text); border-color: var(--accent); }
+  .pill.active {
+    background: rgba(124,109,250,0.15);
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  /* Generate button */
+  .generate-btn {
+    width: 100%;
+    background: linear-gradient(135deg, var(--accent) 0%, var(--accent2) 100%);
+    border: none;
+    color: white;
+    font-family: 'Syne', sans-serif;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    padding: 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-bottom: 24px;
+    animation: fadeUp 0.6s 0.2s ease both;
+  }
+
+  .generate-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 32px rgba(124,109,250,0.4);
+  }
+
+  .generate-btn:active { transform: translateY(0); }
+
+  /* Output */
+  .output-section {
+    animation: fadeUp 0.6s 0.3s ease both;
+  }
+
+  .output-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 2px;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .output-label::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  .output-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 24px;
+    min-height: 100px;
+    font-size: 18px;
+    line-height: 1.8;
+    font-weight: 400;
+    letter-spacing: 0.3px;
+    transition: border-color 0.3s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .output-box.active { border-color: rgba(124,109,250,0.4); }
+
+  .output-box .word {
+    display: inline;
+    opacity: 0;
+    animation: wordFade 0.3s ease forwards;
+  }
+
+  .cursor {
+    display: inline-block;
+    width: 2px;
+    height: 1.1em;
+    background: var(--accent);
+    vertical-align: middle;
+    animation: blink 1s step-end infinite;
+    margin-left: 2px;
+  }
+
+  .placeholder {
+    color: var(--muted);
+    font-size: 15px;
+  }
+
+  /* Stats */
+  .stats-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-top: 16px;
+  }
+
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    text-align: center;
+  }
+
+  .stat-val {
+    font-family: 'Space Mono', monospace;
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--accent);
+  }
+
+  .stat-lbl {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 4px;
+    letter-spacing: 0.5px;
+  }
+
+  /* Ngram viz */
+  .ngram-section {
+    margin-top: 32px;
+    animation: fadeUp 0.6s 0.4s ease both;
+  }
+
+  .ngram-chain {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 12px;
+    min-height: 38px;
+  }
+
+  .ngram-token {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 4px 10px;
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    color: var(--text);
+    transition: all 0.2s;
+  }
+
+  .ngram-token.context {
+    border-color: var(--accent);
+    background: rgba(124,109,250,0.1);
+    color: var(--accent);
+  }
+
+  .ngram-token.predicted {
+    border-color: var(--green);
+    background: rgba(109,250,192,0.1);
+    color: var(--green);
+  }
+
+  .ngram-arrow {
+    color: var(--muted);
+    font-size: 12px;
+    align-self: center;
+  }
+
+  @keyframes fadeDown { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes fadeUp   { from { opacity: 0; transform: translateY(20px);  } to { opacity: 1; transform: translateY(0); } }
+  @keyframes blink    { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+  @keyframes wordFade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+  @media (max-width: 600px) {
+    .controls-grid { grid-template-columns: 1fr; }
+    .stats-row { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <div class="badge">Proiect de:</div>
+    <h1>Adrian Stegaru TTIA<br><span>Generator Text</span></h1>
+    <p class="subtitle">Model de limbaj statistic bazat pe secvențe de N cuvinte. Antrenat pe corp de știri românești.</p>
+  </header>
+
+  <div class="controls-grid">
+    <div class="control-card">
+      <label>Ordinul N (dimensiunea contextului)</label>
+      <div class="n-selector">
+        <button class="n-btn" data-n="2">N=2<br><small>bigramă</small></button>
+        <button class="n-btn active" data-n="3">N=3<br><small>trigramă</small></button>
+        <button class="n-btn" data-n="4">N=4<br><small>4-gram</small></button>
+      </div>
+    </div>
+
+    <div class="control-card">
+      <label>Lungime text generat</label>
+      <div class="slider-row">
+        <input type="range" id="lengthSlider" min="10" max="50" value="20">
+        <span class="slider-val" id="lengthVal">20</span>
+      </div>
+    </div>
+
+    <div class="control-card" style="grid-column: 1 / -1;">
+      <label>Temă de pornire (opțional)</label>
+      <div class="topic-pills">
+        <span class="pill active" data-topic="">Aleatoriu</span>
+        <span class="pill" data-topic="economia">Economie</span>
+        <span class="pill" data-topic="fotbal">Fotbal</span>
+        <span class="pill" data-topic="tehnologia">Tehnologie</span>
+        <span class="pill" data-topic="vremea">Vreme</span>
+        <span class="pill" data-topic="sanatate">Sănătate</span>
+        <span class="pill" data-topic="parlamentul">Politică</span>
+      </div>
+    </div>
+  </div>
+
+  <button class="generate-btn" onclick="generate()">⚡ Generează Text</button>
+
+  <div class="output-section">
+    <div class="output-label">Text generat</div>
+    <div class="output-box" id="outputBox">
+      <span class="placeholder">Apasă butonul pentru a genera text...</span>
+    </div>
+
+    <div class="stats-row">
+      <div class="stat-card">
+        <div class="stat-val" id="statWords">—</div>
+        <div class="stat-lbl">Cuvinte generate</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-val" id="statContexts">—</div>
+        <div class="stat-lbl">Contexte în model</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-val" id="statVocab">—</div>
+        <div class="stat-lbl">Vocabular unic</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="ngram-section">
+    <div class="output-label">Lanț Markov — ultimii pași</div>
+    <div class="ngram-chain" id="ngramChain">
+      <span style="color: var(--muted); font-size: 13px;">Generează text pentru a vizualiza lanțul...</span>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// =====================================================
+// CORPUS DE ȘTIRI
+// =====================================================
+const CORPUS = `
+Guvernul a anunțat astăzi noi măsuri economice pentru susținerea întreprinderilor mici și mijlocii.
+Pachetul de măsuri include reduceri de taxe și acces la credite cu dobânzi avantajoase.
+Ministrul de finanțe a declarat că economia națională înregistrează o creștere semnificativă.
+Creșterea economică este estimată la trei procente pentru acest an fiscal.
+Banca Națională a menținut dobânda de referință la nivelul actual pentru a controla inflația.
+Inflația a scăzut față de luna precedentă potrivit datelor oficiale publicate ieri.
+Echipa națională de fotbal a câștigat meciul de calificare cu un scor de două la unu.
+Antrenorul principal a declarat că jucătorii au demonstrat o evoluție remarcabilă în teren.
+Stadionul a fost plin la capacitate maximă cu peste cincizeci de mii de suporteri entuziaști.
+Suporterii au aplaudat îndelung echipa la finalul meciului foarte disputat.
+Federația de fotbal a anunțat că urmează meciuri importante în luna viitoare.
+Jucătorii au mulțumit fanilor pentru susținerea extraordinară din tribune.
+Cercetătorii au descoperit o nouă metodă de tratament pentru o boală rară.
+Studiul clinic a implicat sute de pacienți din mai multe țări europene.
+Rezultatele sunt promițătoare și vor fi publicate într-o revistă medicală internațională.
+Medicii speră că noul tratament va fi disponibil publicului larg în doi ani.
+Ministerul sănătății a alocat fonduri suplimentare pentru cercetare medicală avansată.
+Spitalele din țară vor beneficia de echipamente moderne în urma investițiilor recente.
+Tehnologia de inteligență artificială transformă industria și piața muncii globale.
+Companiile investesc miliarde de dolari în dezvoltarea sistemelor inteligente de calcul.
+Experții avertizează că unele locuri de muncă vor fi automatizate în deceniul următor.
+Guvernele lumii discută reglementări pentru utilizarea responsabilă a tehnologiei inteligente.
+Universitățile recomandă studenților să dezvolte competențe digitale pentru piața muncii viitoare.
+Studenții sunt încurajați să urmeze cursuri de programare și automatizare modernă.
+Vremea se răcește considerabil în această săptămână în toată țara.
+Meteorologii anunță ploi abundente și vânturi puternice pentru weekend.
+Temperaturile vor scădea sub zero grade în zonele montane înalte.
+Autoritățile recomandă cetățenilor să evite călătoriile pe timp de noapte.
+Drumarii intervin cu utilaje pe șoselele acoperite de gheață și zăpadă.
+Populația este sfătuită să se aprovizioneze cu alimente și medicamente necesare.
+Parlamentul a votat o nouă lege privind protecția mediului înconjurător.
+Legea prevede sancțiuni severe pentru companiile care poluează apa și aerul.
+Organizațiile ecologiste au salutat adoptarea acestei legislații importante.
+Industriașii cer o perioadă de tranziție mai lungă pentru adaptarea la noile norme.
+Comisia Europeană monitorizează progresul statelor membre în privința protecției mediului.
+România trebuie să atingă țintele de reducere a emisiilor până în anul doua mii treizeci.
+`.trim();
+
+// =====================================================
+// MODEL N-GRAM (JavaScript)
+// =====================================================
+
+function tokenize(text) {
+  return text.toLowerCase()
+    .replace(/[^\wșțăîâșțăîâ\s]/g, ' ')
+    .split(/\s+/)
+    .filter(w => w.length >= 2);
+}
+
+function buildNgramModel(tokens, n) {
+  const model = {};
+  for (let i = 0; i < tokens.length - n; i++) {
+    const context = tokens.slice(i, i + n - 1).join(' ');
+    const next = tokens[i + n - 1];
+    if (!model[context]) model[context] = [];
+    model[context].push(next);
+  }
+  return model;
+}
+
+function generateText(model, n, length, seedTopic) {
+  const keys = Object.keys(model);
+  if (keys.length === 0) return [];
+
+  let contextKey;
+  if (seedTopic) {
+    const matching = keys.filter(k => k.includes(seedTopic.toLowerCase()));
+    contextKey = matching.length > 0
+      ? matching[Math.floor(Math.random() * matching.length)]
+      : keys[Math.floor(Math.random() * keys.length)];
+  } else {
+    contextKey = keys[Math.floor(Math.random() * keys.length)];
+  }
+
+  const words = contextKey.split(' ');
+  const chain = [{ words: [...words], type: 'context' }];
+
+  for (let i = 0; i < length; i++) {
+    const ctx = words.slice(-(n - 1)).join(' ');
+    const continuations = model[ctx];
+    if (!continuations || continuations.length === 0) break;
+    const next = continuations[Math.floor(Math.random() * continuations.length)];
+    words.push(next);
+    chain.push({ words: [next], type: 'predicted' });
+  }
+
+  return { words, chain };
+}
+
+// =====================================================
+// STATE
+// =====================================================
+let currentN = 3;
+let currentTopic = '';
+const tokens = tokenize(CORPUS);
+let models = {
+  2: buildNgramModel(tokens, 2),
+  3: buildNgramModel(tokens, 3),
+  4: buildNgramModel(tokens, 4),
+};
+
+// Init stats
+document.getElementById('statContexts').textContent = Object.keys(models[3]).length;
+document.getElementById('statVocab').textContent = new Set(tokens).size;
+
+// =====================================================
+// UI INTERACTIONS
+// =====================================================
+
+document.querySelectorAll('.n-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.n-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentN = parseInt(btn.dataset.n);
+    document.getElementById('statContexts').textContent = Object.keys(models[currentN]).length;
+  });
+});
+
+document.getElementById('lengthSlider').addEventListener('input', function() {
+  document.getElementById('lengthVal').textContent = this.value;
+});
+
+document.querySelectorAll('.pill').forEach(pill => {
+  pill.addEventListener('click', () => {
+    document.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
+    pill.classList.add('active');
+    currentTopic = pill.dataset.topic;
+  });
+});
+
+// =====================================================
+// GENERATE
+// =====================================================
+
+function generate() {
+  const length = parseInt(document.getElementById('lengthSlider').value);
+  const model = models[currentN];
+  const result = generateText(model, currentN, length, currentTopic);
+
+  if (!result || result.words.length === 0) return;
+
+  const box = document.getElementById('outputBox');
+  box.classList.add('active');
+  box.innerHTML = '<span class="cursor"></span>';
+
+  // Animate words
+  result.words.forEach((word, i) => {
+    setTimeout(() => {
+      const span = document.createElement('span');
+      span.className = 'word';
+      span.style.animationDelay = '0ms';
+      span.textContent = (i === 0 ? '' : ' ') + word;
+      box.insertBefore(span, box.querySelector('.cursor'));
+    }, i * 80);
+  });
+
+  // Remove cursor after done
+  setTimeout(() => {
+    const cursor = box.querySelector('.cursor');
+    if (cursor) cursor.remove();
+    box.classList.remove('active');
+  }, result.words.length * 80 + 500);
+
+  // Update stats
+  document.getElementById('statWords').textContent = result.words.length;
+  document.getElementById('statContexts').textContent = Object.keys(model).length;
+  document.getElementById('statVocab').textContent = new Set(tokens).size;
+
+  // Update n-gram chain visualization (last 6 steps)
+  const chainEl = document.getElementById('ngramChain');
+  chainEl.innerHTML = '';
+  const steps = result.chain.slice(-8);
+  steps.forEach((step, i) => {
+    step.words.forEach(w => {
+      const token = document.createElement('span');
+      token.className = 'ngram-token ' + (i < steps.length - 3 ? 'context' : 'predicted');
+      token.textContent = w;
+      chainEl.appendChild(token);
+    });
+    if (i < steps.length - 1) {
+      const arrow = document.createElement('span');
+      arrow.className = 'ngram-arrow';
+      arrow.textContent = '→';
+      chainEl.appendChild(arrow);
+    }
+  });
+}
+</script>
+</body>
+</html>
+
+"""
+=============================================================
+  GENERARE DE TEXT CU N-GRAMS
+  Temă Master - Inteligență Artificială
+=============================================================
+
+DESCRIERE:
+    Acest program implementează un model simplu de generare de text
+    bazat pe tehnica N-grams. Modelul învață din texte de știri,
+    construind o tabelă de probabilități pentru secvențe de cuvinte,
+    apoi generează text nou prin eșantionare aleatorie.
+
+CONCEPTE CHEIE:
+    - N-gram: o secvență de N cuvinte consecutive dintr-un text
+    - Bigramă (N=2): pereche de 2 cuvinte  → ("vremea", "este")
+    - Trigramă (N=3): triplet de 3 cuvinte → ("vremea", "este", "frumoasă")
+    - Model de limbaj: estimează probabilitatea unui cuvânt
+      următor pe baza contextului (cuvintele anterioare)
+
+FLUX:
+    Text brut → Preprocesare → Construire N-grams → Generare text nou
+"""
+
+import random
+import re
+from collections import defaultdict, Counter
+
+
+# =============================================================
+# 1. DATE DE ANTRENAMENT (texte de știri simulate)
+# =============================================================
+
+# În practică, acestea ar fi încărcate dintr-un fișier sau API de știri.
+# Folosim un corpus mic dar reprezentativ pentru domeniul știrilor.
+
+CORPUS_STIRI = """
+Guvernul a anunțat astăzi noi măsuri economice pentru susținerea întreprinderilor mici și mijlocii.
+Pachetul de măsuri include reduceri de taxe și acces la credite cu dobânzi avantajoase.
+Ministrul de finanțe a declarat că economia națională înregistrează o creștere semnificativă.
+Creșterea economică este estimată la trei procente pentru acest an fiscal.
+Banca Națională a menținut dobânda de referință la nivelul actual pentru a controla inflația.
+Inflația a scăzut față de luna precedentă, potrivit datelor oficiale publicate ieri.
+
+Echipa națională de fotbal a câștigat meciul de calificare cu un scor de două la unu.
+Antrenorul principal a declarat că jucătorii au demonstrat o evoluție remarcabilă în teren.
+Stadionul a fost plin la capacitate maximă cu peste cincizeci de mii de suporteri entuziaști.
+Suporterii au aplaudat îndelung echipa la finalul meciului foarte disputat.
+Federația de fotbal a anunțat că urmează meciuri importante în luna viitoare.
+Jucătorii au mulțumit fanilor pentru susținerea extraordinară din tribune.
+
+Cercetătorii au descoperit o nouă metodă de tratament pentru o boală rară.
+Studiul clinic a implicat sute de pacienți din mai multe țări europene.
+Rezultatele sunt promițătoare și vor fi publicate într-o revistă medicală internațională.
+Medicii speră că noul tratament va fi disponibil publicului larg în doi ani.
+Ministerul sănătății a alocat fonduri suplimentare pentru cercetare medicală avansată.
+Spitalele din țară vor beneficia de echipamente moderne în urma investițiilor recente.
+
+Tehnologia de inteligență artificială transformă industria și piața muncii globale.
+Companiile investesc miliarde de dolari în dezvoltarea sistemelor inteligente de calcul.
+Experții avertizează că unele locuri de muncă vor fi automatizate în deceniul următor.
+Guvernele lumii discută reglementări pentru utilizarea responsabilă a inteligenței artificiale.
+Universităților li se recomandă să introducă cursuri de programare și automatizare.
+Studenții sunt încurajați să dezvolte competențe digitale pentru piața muncii viitoare.
+
+Vremea se răcește considerabil în această săptămână în toată țara.
+Meteorologii anunță ploi abundente și vânturi puternice pentru weekend.
+Temperaturile vor scădea sub zero grade în zonele montane înalte.
+Autoritățile recomandă cetățenilor să evite călătoriile pe timp de noapte.
+Drumarii intervin cu utilaje pe șoselele acoperite de gheață și zăpadă.
+Populația este sfătuită să se aprovizioneze cu alimente și medicamente necesare.
+
+Parlamentul a votat o nouă lege privind protecția mediului înconjurător.
+Legea prevede sancțiuni severe pentru companiile care poluează apa și aerul.
+Organizațiile ecologiste au salutat adoptarea acestei legislații importante.
+Industriașii cer o perioadă de tranziție mai lungă pentru adaptarea la noile norme.
+Comisia Europeană monitorizează progresul statelor membre în privința protecției mediului.
+România trebuie să atingă țintele de reducere a emisiilor până în anul doua mii treizeci.
+"""
+
+
+# =============================================================
+# 2. PREPROCESARE TEXT
+# =============================================================
+
+def preproceseaza_text(text):
+    """
+    Curăță și tokenizează textul brut în listă de cuvinte.
+
+    Pași:
+        1. Convertire la litere mici (normalizare)
+        2. Eliminarea caracterelor speciale nedorite
+        3. Împărțirea în cuvinte individuale (tokenizare)
+        4. Filtrarea cuvintelor prea scurte
+
+    Args:
+        text (str): Textul brut de intrare
+
+    Returns:
+        list: Listă de cuvinte procesate (tokens)
+    """
+    # Pas 1: Convertim totul la litere mici pentru uniformitate
+    text = text.lower()
+
+    # Pas 2: Înlocuim caracterele de punctuație cu spații
+    # Păstrăm literele (inclusiv diacritice românești) și cifrele
+    text = re.sub(r'[^\w\sșțăîâșțăîâ]', ' ', text)
+
+    # Pas 3: Împărțim textul în cuvinte (tokenizare simplă)
+    cuvinte = text.split()
+
+    # Pas 4: Eliminăm cuvintele cu mai puțin de 2 caractere
+    cuvinte = [c for c in cuvinte if len(c) >= 2]
+
+    return cuvinte
+
+
+# =============================================================
+# 3. CONSTRUIREA MODELULUI N-GRAMS
+# =============================================================
+
+def construieste_ngrams(tokens, n=2):
+    """
+    Construiește un model N-gram din lista de tokens.
+
+    Un model N-gram mapează fiecare secvență de (N-1) cuvinte
+    la lista de cuvinte care o urmează în corpus.
+
+    Exemplu pentru N=2 (bigrame):
+        tokens = ["azi", "este", "o", "zi", "frumoasă"]
+        model  = {
+            ("azi",)    : ["este"],
+            ("este",)   : ["o"],
+            ("o",)      : ["zi"],
+            ("zi",)     : ["frumoasă"]
+        }
+
+    Args:
+        tokens (list): Lista de cuvinte din corpus
+        n (int): Ordinul N-gramului (2=bigramă, 3=trigramă)
+
+    Returns:
+        dict: Modelul N-gram { context_tuple : [cuvinte_posibile] }
+    """
+    # defaultdict(list) creează automat o listă goală pentru chei noi
+    model = defaultdict(list)
+
+    # Parcurgem textul cu o fereastră glisantă de dimensiune N
+    for i in range(len(tokens) - n):
+        # Contextul = primele (N-1) cuvinte din fereastră
+        context = tuple(tokens[i:i + n - 1])
+
+        # Cuvântul următor = ultimul cuvânt din fereastră
+        cuvant_urmator = tokens[i + n - 1]
+
+        # Adăugăm cuvântul următor în lista asociată contextului
+        model[context].append(cuvant_urmator)
+
+    return model
+
+
+def statistici_model(model, tokens):
+    """
+    Afișează statistici despre modelul construit.
+
+    Args:
+        model (dict): Modelul N-gram
+        tokens (list): Lista de tokens din corpus
+    """
+    print("=" * 55)
+    print("  STATISTICI MODEL")
+    print("=" * 55)
+    print(f"  Total cuvinte în corpus  : {len(tokens)}")
+    print(f"  Vocabular unic           : {len(set(tokens))} cuvinte")
+    print(f"  Contexte unice (N-grams) : {len(model)}")
+
+    # Găsim cele mai frecvente contexte
+    frecvente = sorted(model.items(), key=lambda x: len(x[1]), reverse=True)[:5]
+    print(f"\n  Top 5 contexte frecvente:")
+    for context, urmatori in frecvente:
+        print(f"    {' '.join(context):20s} → {len(urmatori)} continuări posibile")
+    print("=" * 55)
+
+
+# =============================================================
+# 4. GENERAREA TEXTULUI NOU
+# =============================================================
+
+def genereaza_text(model, n, lungime=30, seed=None):
+    """
+    Generează text nou folosind modelul N-gram prin eșantionare.
+
+    Algoritmul:
+        1. Alegem un context de start (aleatoriu sau specificat)
+        2. La fiecare pas, privim contextul curent
+        3. Alegem aleatoriu un cuvânt din lista de continuări posibile
+        4. Actualizăm contextul și repetăm până la lungimea dorită
+
+    Această abordare se numește "Markov Chain" - cuvântul următor
+    depinde DOAR de contextul imediat (nu de tot textul anterior).
+
+    Args:
+        model (dict): Modelul N-gram antrenat
+        n (int): Ordinul N-gramului folosit la antrenament
+        lungime (int): Numărul de cuvinte de generat
+        seed (tuple): Context de pornire (opțional)
+
+    Returns:
+        str: Textul generat
+    """
+    # Dacă nu avem seed, alegem un context aleatoriu din model
+    if seed is None:
+        context_curent = random.choice(list(model.keys()))
+    else:
+        context_curent = seed
+
+    # Inițializăm textul generat cu cuvintele din contextul de start
+    text_generat = list(context_curent)
+
+    # Generăm cuvintele unul câte unul
+    for _ in range(lungime):
+        # Căutăm continuările posibile pentru contextul curent
+        continuari_posibile = model.get(context_curent)
+
+        # Dacă nu există continuări (capăt de corpus), ne oprim
+        if not continuari_posibile:
+            break
+
+        # Alegem aleatoriu un cuvânt următor din continuările posibile
+        # Cuvintele care apar mai frecvent au șanse mai mari să fie alese
+        # (pentru că apar de mai multe ori în lista de continuări)
+        cuvant_nou = random.choice(continuari_posibile)
+
+        # Adăugăm cuvântul la textul generat
+        text_generat.append(cuvant_nou)
+
+        # Actualizăm contextul: eliminăm primul cuvânt, adăugăm cel nou
+        # Exemplu context (n=2): ("vremea", "este") → ("este", "frumoasă")
+        context_curent = tuple(text_generat[-(n - 1):])
+
+    return ' '.join(text_generat)
+
+
+def genereaza_cu_tema(model, n, tema_cuvant, lungime=25):
+    """
+    Generează text pornind de la un cuvânt cheie specific.
+
+    Caută în model toate contextele care conțin cuvântul temă
+    și alege unul ca punct de pornire.
+
+    Args:
+        model (dict): Modelul N-gram
+        n (int): Ordinul N-gramului
+        tema_cuvant (str): Cuvântul cheie de pornire
+        lungime (int): Lungimea textului de generat
+
+    Returns:
+        str: Textul generat sau mesaj de eroare
+    """
+    # Căutăm toate contextele care conțin cuvântul temă
+    contexte_cu_tema = [
+        ctx for ctx in model.keys()
+        if tema_cuvant.lower() in ctx
+    ]
+
+    if not contexte_cu_tema:
+        return f"[Cuvântul '{tema_cuvant}' nu a fost găsit în corpus]"
+
+    # Alegem aleatoriu unul din contextele găsite
+    context_start = random.choice(contexte_cu_tema)
+
+    return genereaza_text(model, n, lungime=lungime, seed=context_start)
+
+
+# =============================================================
+# 5. EVALUARE: PERPLEXITATE
+# =============================================================
+
+def calculeaza_perplexitate(model, tokens_test, n):
+    """
+    Calculează perplexitatea modelului pe date de test.
+
+    Perplexitatea măsoară "surpriza" modelului față de text nou.
+    - Valoare mică = modelul prezice bine textul → mai bun
+    - Valoare mare = modelul este "surprins" de text → mai slab
+
+    Formulă: PP = 2^(-1/N * Σ log2(P(w|context)))
+
+    Args:
+        model (dict): Modelul N-gram
+        tokens_test (list): Tokenuri de test
+        n (int): Ordinul N-gramului
+
+    Returns:
+        float: Valoarea perplexității
+    """
+    import math
+
+    log_prob_total = 0
+    count = 0
+
+    for i in range(len(tokens_test) - n):
+        context = tuple(tokens_test[i:i + n - 1])
+        cuvant_real = tokens_test[i + n - 1]
+
+        continuari = model.get(context, [])
+
+        if continuari:
+            # Probabilitatea cuvântului real = frecvență relativă
+            freq_cuvant = continuari.count(cuvant_real)
+            probabilitate = freq_cuvant / len(continuari)
+
+            if probabilitate > 0:
+                log_prob_total += math.log2(probabilitate)
+                count += 1
+
+    if count == 0:
+        return float('inf')
+
+    perplexitate = 2 ** (-log_prob_total / count)
+    return round(perplexitate, 2)
+
+
+# =============================================================
+# 6. PROGRAM PRINCIPAL
+# =============================================================
+
+def main():
+    print("\n" + "=" * 55)
+    print("  GENERARE TEXT CU N-GRAMS — MODEL DE LIMBAJ")
+    print("  Temă Master Inteligență Artificială")
+    print("=" * 55)
+
+    # --- Preprocesare ---
+    print("\n[1] Preprocesare corpus...")
+    tokens = preproceseaza_text(CORPUS_STIRI)
+    print(f"    Corpus procesat: {len(tokens)} tokens")
+
+    # --- Antrenare modele cu N diferit ---
+    print("\n[2] Antrenare modele N-gram...")
+
+    model_bigram  = construieste_ngrams(tokens, n=2)
+    model_trigram = construieste_ngrams(tokens, n=3)
+    model_4gram   = construieste_ngrams(tokens, n=4)
+
+    print(f"    Bigramă  (N=2): {len(model_bigram)} contexte")
+    print(f"    Trigramă (N=3): {len(model_trigram)} contexte")
+    print(f"    4-gram   (N=4): {len(model_4gram)} contexte")
+
+    # --- Statistici ---
+    print()
+    statistici_model(model_trigram, tokens)
+
+    # --- Generare text ---
+    print("\n[3] Generare text nou...\n")
+
+    random.seed(42)  # Seed fix pentru reproducibilitate
+
+    # Comparație între diferite valori ale lui N
+    for n, model, eticheta in [
+        (2, model_bigram,  "BIGRAMĂ  (N=2) — context 1 cuvânt"),
+        (3, model_trigram, "TRIGRAMĂ (N=3) — context 2 cuvinte"),
+        (4, model_4gram,   "4-GRAM   (N=4) — context 3 cuvinte"),
+    ]:
+        print(f"  [{eticheta}]")
+        text = genereaza_text(model, n=n, lungime=20)
+        print(f"  {text}")
+        print()
+
+    # Generare cu temă specifică
+    print("  [GENERARE PE TEME SPECIFICE — Trigramă]\n")
+    for tema in ["economia", "fotbal", "tehnologia", "vremea"]:
+        text = genereaza_cu_tema(model_trigram, n=3, tema_cuvant=tema, lungime=18)
+        print(f"  Tema '{tema}':")
+        print(f"  {text}\n")
+
+    # --- Evaluare ---
+    print("[4] Evaluare model (Perplexitate)...")
+    # Folosim o parte din corpus ca date de test
+    tokens_test = tokens[:100]
+    for n, model, eticheta in [
+        (2, model_bigram,  "Bigramă"),
+        (3, model_trigram, "Trigramă"),
+        (4, model_4gram,   "4-gram"),
+    ]:
+        pp = calculeaza_perplexitate(model, tokens_test, n)
+        print(f"    {eticheta:12s}: perplexitate = {pp}")
+
+    print("\n" + "=" * 55)
+    print("  CONCLUZIE:")
+    print("  - N mai mare = context mai lung = text mai coerent")
+    print("  - N prea mare = model memorează corpus, nu generalizează")
+    print("  - N optim depinde de dimensiunea corpusului")
+    print("=" * 55 + "\n")
+
+
+if __name__ == "__main__":
+    main()
